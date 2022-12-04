@@ -1,75 +1,95 @@
 import os
-import datetime
 import pathlib
 import subprocess
 import shutil
-from download import download, get_size
+import download
 
 
 def checkCat(outputDir, vidName, subVidCount, vidsNeedToCat):
-    if subVidCount == 0:
-        return
 
-    print('  patching...')
+    if subVidCount > 1:
+        print('  patching...')
 
-    # create new cat list
-    catlist = open("temp/catlist.txt", "a")
-    for subVidName in vidsNeedToCat:
-        catlist.write('file \'../{}/{}.mp4\'\n'.format(outputDir, subVidName))
-    catlist.close()
+        # generate cat list
+        catlist = open("temp/catlist.txt", "a")
+        for subVidName in vidsNeedToCat:
+            catlist.write(
+                'file \'../{}/{}.mp4\'\n'.format(outputDir, subVidName))
+        catlist.close()
 
-    if subVidCount > 0:
-        if subVidCount > 1:
-            subprocess.check_call('ffmpeg -f concat -safe 0 -i temp/catlist.txt -c copy {}/{}.mp4'.format(
-                outputDir, vidName), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # cat vid and rename
+        subprocess.check_call('lib/ffmpeg.exe -f concat -safe 0 -i temp/catlist.txt -c copy {}/{}.mp4'.format(
+            outputDir, vidName), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            for subVidName in vidsNeedToCat:
-                os.remove('{}/{}.mp4'.format(outputDir, subVidName))
+        for subVidName in vidsNeedToCat:
+            os.remove(f'{outputDir}/{subVidName}.mp4')
 
+    else:
+        os.rename(
+            f'{outputDir}/{vidsNeedToCat[0]}.mp4', f'{outputDir}/{vidName}.mp4')
+
+    # clear cat list
     open("temp/catlist.txt", "w").close()
     vidsNeedToCat.clear()
-
-    print('  patched\n\n')
+    print('  done\n')
 
 
 def main():
-    urlPath = 'urls.txt'
-    vidName = 'temp'
-    subVidCount = 0
-    vidsNeedToCat = []
-    outputDir = "OUTPUT_{}".format(datetime.datetime.now().strftime("%H%M%S"))
-
-    pathlib.Path('temp').mkdir(exist_ok=True)
-    pathlib.Path(outputDir).mkdir(exist_ok=False)
+    urlPath = ''
 
     # delete '\'s and split lines into urls
-    with open(urlPath, 'r') as f:
-        urls = f.read().replace('\\', '').split('\n')
+    try:
+        urlPath = 'urls.txt'
+        with open(urlPath, 'r', encoding='utf-8') as f:
+            lines = f.read().replace('\\', '').split('\n')
+    except FileNotFoundError:
+        urlPath = '../urls.txt'
+        with open(urlPath, 'r', encoding='utf-8') as f:
+            lines = f.read().replace('\\', '').split('\n')
+
+    vidName = ''
+    subVidCount = 0
+    vidsNeedToCat = []
+    outputDir = ''
+
+    pathlib.Path('temp').mkdir(exist_ok=True)
 
     open("temp/catlist.txt", "w").close()
 
-    for url in urls:
-        # setup video name
-        if url.startswith('#'):
-            checkCat(outputDir, vidName, subVidCount, vidsNeedToCat)
-            subVidCount = 0
+    for line in lines:
+        if line == '':
+            continue
 
-            vidName = url.split('#')[1].replace(' ', '_')
-            if vidName.startswith('_'):
-                vidName = vidName[1:]
-            print(f'* starting to download {vidName}.mp4')
+        if line.startswith('#'):
+            outputFolderName = line[line.find(' ') + 1:]
+            outputDir = f'downloaded/{outputFolderName}'
+            pathlib.Path(outputDir).mkdir(parents=True, exist_ok=True)
+            print('--------------------------------------------------------------------')
+            print(f'the following classes are downloaded to: {outputDir}')
+            print('--------------------------------------------------------------------')
+            continue
 
-        # download from url
-        elif url.startswith('http'):
-            subVidCount += 1
-            print('  downloading resource {} ({:.2f}MB)'.format(
-                subVidCount, get_size(url)))
-            subVidName = f'{vidName}_TEMP{subVidCount}'
+        lineElements = line.split(' ')
+        vidName = lineElements[0]   # get the video name
+        subVidCount = len(lineElements) - 1  # how many subvids in this line?
+
+        print(f'* downloading recording: {vidName}.mp4')
+
+        # if lineElements.count == 2:
+
+        # download all tmp videos for this vid
+        for i in range(1, len(lineElements)):
+            currentUrl = lineElements[i]
+
+            print('  -> sub-source {} ({:.2f}MB)'.format(
+                i, download.get_size(currentUrl)))
+            subVidName = f'{vidName}_{i}'
             vidsNeedToCat.append(subVidName)
 
-            download(url, f'{outputDir}/{subVidName}.mp4')
+            download.download(currentUrl, f'{outputDir}/{subVidName}.mp4')
 
-    checkCat(outputDir, vidName, subVidCount, vidsNeedToCat)
+        checkCat(outputDir, vidName, subVidCount, vidsNeedToCat)
+
     f.close()
     shutil.rmtree('temp')
 

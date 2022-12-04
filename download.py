@@ -1,6 +1,6 @@
 import requests
-from time import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# from concurrent.futures import ThreadPoolExecutor, as_completed
+import concurrent.futures
 
 num_of_tasks = 4
 chunk_size = 4096
@@ -43,10 +43,10 @@ def download(url, save_path):
     with open(save_path, 'wb'):
         pass
 
-    with ThreadPoolExecutor() as p:
+    with concurrent.futures.ThreadPoolExecutor() as p:
         futures = []
         for s_pos, e_pos in divisional_ranges:
             futures.append(
                 p.submit(range_download, save_path, url, s_pos, e_pos))
 
-        as_completed(futures)
+        concurrent.futures.as_completed(futures)
